@@ -1,0 +1,27 @@
+# Agent Workbench — Cursor rules
+
+This project uses the agent-workbench standard dev-workflow. Skills live in
+`.cursor/rules/` (installed from `skills/` + `adapters/claude/rules/` in the
+agent-workbench repo).
+
+## Pipeline
+
+`incept` → `tech-incept` → `tech-discovery` (optional) → `write-plan` →
+`plan-review` (optional) → `execute-plan` → `git-pr` / `github-pr-description`
+
+Each skill produces a single artifact under
+`$ARTIFACT_DIR/<scope>/<slug>/<slug>-*.md`. See `.cursor/rules/30-artifact-dir.md`
+for `<scope>` resolution.
+
+## Hard rules
+
+- Resolve `$ARTIFACT_DIR` from environment — never hardcode vault paths.
+- Use slug-prefixed filenames under `$ARTIFACT_DIR/<scope>/<slug>/`.
+- Confirm the final path before writing the first artifact in a new scope.
+- Skills are deterministic and bounded — prefer bounded changes over broad
+  rewrites.
+
+## Coding standards
+
+See `.cursor/rules/10-coding-standards.md` for project coding conventions
+(installed alongside this file).

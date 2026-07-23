@@ -1,0 +1,62 @@
+{
+  "version": "1.0",
+  "description": "Manifest of personal skills to install. Remote entries (source: remote) are cloned from a repo; local entries (source: local) are vendored in a subdirectory alongside this manifest. The install script prompts before adding each one.",
+  "skills": [
+    {
+      "skill": "drawio",
+      "source": "remote",
+      "repo": "https://github.com/Agents365-ai/drawio-skill",
+      "file": "drawio.md",
+      "description": "Create, edit, and manage diagrams with Draw.io integration. Supports embedding diagrams in artifacts for documentation, planning, and design.",
+      "tags": ["visualization", "diagrams", "documentation"]
+    },
+    {
+      "skill": "system-issue-analysis",
+      "source": "local",
+      "path": "system-issue-analysis",
+      "file": "SKILL.md",
+      "description": "Read-only investigation of a suspected system issue, bug, or unusual behavior in the Gloo Forge platform. Produces an evidence-based diagnostic report — symptom, failing layer, root cause, blast radius, recommended fix — with each distinct issue assigned a stable ID plus an appendix debugging prompt so a later fix-oriented deep dive can target one issue with minimal context. Analysis only, no code changes.",
+      "tags": ["diagnostics", "incident", "analysis", "gloo-forge", "convex"]
+    },
+    {
+      "skill": "systematic-debugging",
+      "source": "local",
+      "path": "systematic-debugging",
+      "file": "SKILL.md",
+      "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes. Drives one issue to a verified root-cause fix and records the session as a <slug>-debug.md artifact under $ARTIFACT_DIR; can be driven by a system-issue-analysis issue ID when one is provided.",
+      "tags": ["debugging", "root-cause", "testing"]
+    },
+    {
+      "skill": "agent-browser",
+      "source": "local",
+      "path": "agent-browser",
+      "file": "SKILL.md",
+      "description": "Automate browser interactions for local app testing, form filling, screenshots, and UI verification. Use when the user asks to test flows in a browser.",
+      "tags": ["browser", "testing", "automation"]
+    },
+    {
+      "skill": "fix-failing-tests",
+      "source": "local",
+      "path": "fix-failing-tests",
+      "file": "SKILL.md",
+      "description": "Diagnose and fix failing tests. Use when tests are broken and need root-cause analysis and a targeted fix — not a broad refactor.",
+      "tags": ["testing", "debugging"]
+    },
+    {
+      "skill": "git-pr",
+      "source": "local",
+      "path": "git-pr",
+      "file": "SKILL.md",
+      "description": "Create pull requests by analyzing commits, drafting summaries, and opening PRs with gh. Use when the user asks to create, open, or submit a PR.",
+      "tags": ["git", "github", "pull-request"]
+    },
+    {
+      "skill": "github-pr-description",
+      "source": "local",
+      "path": "github-pr-description",
+      "file": "SKILL.md",
+      "description": "Generate and create GitHub pull requests with structured descriptions. Handles branch push, PR creation via gh, ticket linking, and description formatting.",
+      "tags": ["git", "github", "pull-request"]
+    }
+  ]
+}

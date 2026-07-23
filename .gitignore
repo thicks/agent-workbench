@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+.next/
+coverage/
+*.log
+
+# Local tool config (user-specific, not shared)
+.claude/settings.local.json
+
+# OS metadata
+.DS_Store
+
+# Secrets and credentials
+.env*
+*.pem
+*.key
+
+# Binary files
+*.pdf
+
+# Default artifact output (when ARTIFACT_DIR is not set)
+artifacts/
