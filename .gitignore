@@ -21,3 +21,7 @@ coverage/
 
 # Default artifact output (when ARTIFACT_DIR is not set)
 artifacts/
+
+# User-specific skill manifests (e.g. private.manifest.json). The shared
+# manifest.json stays tracked; only *.manifest.json variants are ignored.
+skills-personal/*.manifest.json
