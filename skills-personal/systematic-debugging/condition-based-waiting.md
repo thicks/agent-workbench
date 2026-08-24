@@ -79,7 +79,9 @@ async function waitFor<T>(
 }
 ```
 
-See `condition-based-waiting-example.ts` in this directory for complete implementation with domain-specific helpers (`waitForEvent`, `waitForEventCount`, `waitForEventMatch`) from actual debugging session.
+See `condition-based-waiting-example.ts` for `waitFor` plus thin helpers.
+Polling is portable when there is no subscribe API; clear the timer on
+settle; the bound is `timeoutMs + POLL_INTERVAL_MS`.
 
 ## Common Mistakes
 

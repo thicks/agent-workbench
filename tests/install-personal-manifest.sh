@@ -74,7 +74,7 @@ command -v python3 >/dev/null 2>&1 || fail "python3 required to read the manifes
 STD_TARGET="$(mktemp -d)"
 refuse_home_or_repo "$STD_TARGET"
 set +e
-printf '%s\n' "$STD_TARGET" "1" "y" | "$ROOT/install.sh"
+"$ROOT/install.sh" --yes --target "$STD_TARGET" --tool 1
 std_rc=$?
 set -e
 [[ "$std_rc" -eq 0 ]] || fail "install.sh exited $std_rc"

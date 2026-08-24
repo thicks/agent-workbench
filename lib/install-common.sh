@@ -2,10 +2,26 @@
 # shellcheck shell=bash
 
 backup_if_exists() {
+  local ts dest
   if [[ -e "$1" ]]; then
-    cp -R "$1" "${1}.bak"
-    echo "  backed up: $1"
+    ts="$(date +%Y%m%d%H%M%S)"
+    dest="${1}.bak.${ts}"
+    cp -R "$1" "$dest"
+    echo "  backed up: $dest"
   fi
+}
+
+record_installed() {
+  local dest rel
+  dest="$1"
+  [[ -n "${TARGET:-}" ]] || return 0
+  [[ "${DRY_RUN:-0}" == "1" ]] && return 0
+  rel="$dest"
+  if [[ "$dest" == "${TARGET%/}"/* ]]; then
+    rel="${dest#"${TARGET%/}"/}"
+  fi
+  mkdir -p "$TARGET"
+  printf '%s\n' "$rel" >> "$TARGET/.agent-workbench-installed.txt"
 }
 
 prompt_overwrite() {
@@ -43,6 +59,11 @@ install_file_safe() {
     return 1
   fi
 
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "  dry-run: $desc"
+    return 0
+  fi
+
   if [[ -e "$dest" ]]; then
     if cmp -s "$src" "$dest"; then
       echo "  unchanged: $desc"
@@ -57,6 +78,7 @@ install_file_safe() {
 
   mkdir -p "$(dirname "$dest")" || return 1
   cp "$src" "$dest" || return 1
+  record_installed "$dest"
   echo "  installed: $desc"
 }
 
@@ -91,21 +113,26 @@ write_skill() {
   local dest="$1" label="$2" body="$3"; shift 3
   local st=0
 
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "  dry-run: $label"
+    return 0
+  fi
+
   mkdir -p "$(dirname "$dest")" || return 1
   local tmp_file
-  tmp_file=$(mktemp)
+  tmp_file=$(mktemp) || return 1
   {
     echo "---"
     printf '%s\n' "$@"
     echo "---"
     echo
     printf '%s\n' "$body"
-  } > "$tmp_file"
+  } > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
 
   if [[ -e "$dest" ]]; then
     if cmp -s "$tmp_file" "$dest"; then
       echo "  unchanged: $label"
-      rm "$tmp_file"
+      rm -f "$tmp_file"
       return 0
     fi
     prompt_overwrite "$dest" "$label" || {
@@ -116,7 +143,8 @@ write_skill() {
     }
   fi
 
-  mv "$tmp_file" "$dest" || return 1
+  mv "$tmp_file" "$dest" || { rm -f "$tmp_file"; return 1; }
+  record_installed "$dest"
   echo "  rendered: $label"
 }
 
@@ -130,10 +158,24 @@ install_dir_safe() {
     return 0
   fi
 
-  mkdir -p "$dest_dir"
+  if [[ "${DRY_RUN:-0}" != "1" ]]; then
+    mkdir -p "$dest_dir"
+  fi
 
-  for src_file in "$src_dir"/*; do
-    local filename dest_file
+  local nullglob_was=0
+  shopt -q nullglob && nullglob_was=1
+  shopt -s nullglob
+  local src_files=("$src_dir"/*)
+  if [[ "$nullglob_was" -eq 0 ]]; then
+    shopt -u nullglob
+  fi
+
+  if [[ ${#src_files[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  local src_file filename dest_file
+  for src_file in "${src_files[@]}"; do
     filename="$(basename "$src_file")"
     dest_file="$dest_dir/$filename"
 
@@ -150,7 +192,12 @@ install_dir_safe() {
         fi
         rm -rf "$dest_file"
       fi
+      if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        echo "  dry-run: $desc/$filename/"
+        continue
+      fi
       cp -R "$src_file" "$dest_file" || return 1
+      record_installed "$dest_file"
       echo "  installed: $desc/$filename/"
     else
       ok_or_skip install_file_safe "$src_file" "$dest_file" "$desc/$filename"

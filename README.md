@@ -16,11 +16,14 @@ and do not enforce pipeline order.
 git clone https://github.com/thicks/agent-workbench.git
 cd agent-workbench
 
-./install.sh
+./install.sh --yes --target /path/to/project --tool 4
 ```
 
-The script asks for a target project path and which tool (Claude Code,
-Cursor, opencode, or all), then renders and copies the right files in.
+Default target is the current directory (not `$HOME`). `--tool` is `1`/`claude`,
+`2`/`cursor`, `3`/`opencode`, `4`/`all`, or a comma list. `./uninstall.sh DIR`
+removes files listed in `DIR/.agent-workbench-installed.txt`.
+
+Without flags, the script prompts for target, tool, and confirmation.
 
 ## Pipeline
 
