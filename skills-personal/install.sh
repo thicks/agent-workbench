@@ -5,6 +5,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=lib/install-common.sh
+source "$REPO_DIR/lib/install-common.sh"
 MANIFEST_FILE="$SCRIPT_DIR/manifest.json"
 TARGET="${TARGET:-$PWD}"
 SKILLS_DIR="${SKILLS_DIR:-$TARGET/.claude/skills}"
@@ -26,8 +29,7 @@ echo "====================================="
 echo
 
 mkdir -p "$TARGET/skills-personal"
-cp "$MANIFEST_FILE" "$TARGET/skills-personal/manifest.json"
-echo "  installed: skills-personal/manifest.json"
+ok_or_skip install_file_safe "$MANIFEST_FILE" "$TARGET/skills-personal/manifest.json" "skills-personal/manifest.json"
 
 install_local() {
   local name="$1" rel="$2" file="$3"
@@ -42,14 +44,12 @@ install_local() {
   fi
 
   mkdir -p "$dest_dir"
-  cp "$src" "$dest_dir/$(basename "$file")"
-  echo "  installed: $dest_dir/$(basename "$file")"
+  ok_or_skip install_file_safe "$src" "$dest_dir/$(basename "$file")" "$dest_dir/$(basename "$file")"
 
   for extra in "$src_dir"/*; do
     [[ -f "$extra" ]] || continue
     [[ "$(basename "$extra")" == "$(basename "$file")" ]] && continue
-    cp "$extra" "$dest_dir/$(basename "$extra")"
-    echo "  installed: $dest_dir/$(basename "$extra")"
+    ok_or_skip install_file_safe "$extra" "$dest_dir/$(basename "$extra")" "$dest_dir/$(basename "$extra")"
   done
 }
 
@@ -110,8 +110,8 @@ install_remote() {
     return 1
   fi
   mkdir -p "$SKILLS_DIR/$name"
-  cp "$temp_dir/$file" "$SKILLS_DIR/$name/$(basename "$file")"
-  echo "  installed: $SKILLS_DIR/$name/$(basename "$file") (remote $actual)"
+  ok_or_skip install_file_safe "$temp_dir/$file" "$SKILLS_DIR/$name/$(basename "$file")" "$SKILLS_DIR/$name/$(basename "$file")"
+  echo "  remote $name @$actual"
   rm -rf "$temp_dir"
 }
 

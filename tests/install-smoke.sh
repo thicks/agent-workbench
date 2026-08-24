@@ -6,16 +6,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STD_TARGET=""
 STD_TARGET2=""
 ALL_TARGET=""
-ICM_TARGET=""
-ICM_ALL_TARGET=""
 SKIP_TARGET=""
 
 cleanup() {
   [[ -n "${STD_TARGET:-}" ]] && rm -rf "$STD_TARGET"
   [[ -n "${STD_TARGET2:-}" ]] && rm -rf "$STD_TARGET2"
   [[ -n "${ALL_TARGET:-}" ]] && rm -rf "$ALL_TARGET"
-  [[ -n "${ICM_TARGET:-}" ]] && rm -rf "$ICM_TARGET"
-  [[ -n "${ICM_ALL_TARGET:-}" ]] && rm -rf "$ICM_ALL_TARGET"
   [[ -n "${SKIP_TARGET:-}" ]] && rm -rf "$SKIP_TARGET"
 }
 trap cleanup EXIT
@@ -119,13 +115,40 @@ run_installer() {
 # macOS bash 3.2 does not, so inventory-only tests can false-green locally.
 ban_arith_postincrement() {
   local f
-  for f in "$ROOT/install.sh" "$ROOT/install-icm.sh"; do
+  for f in "$ROOT/install.sh" "$ROOT/lib/install-common.sh" "$ROOT/skills-personal/install.sh"; do
+    [[ -f "$f" ]] || fail "missing installer: $f"
     if grep -nE '\(\((file_count|skip_count)\+\+\)\)' "$f"; then
       fail "C1 regression in $f: remove dead ((count++)) under set -e; use no counters or count=\$((count + 1))"
     fi
   done
 }
 ban_arith_postincrement
+
+# M3: helpers live in one place; entry points must source them, not copy them.
+grep -Fqe 'source "$REPO_DIR/lib/install-common.sh"' "$ROOT/install.sh" || fail "M3: install.sh must source lib/install-common.sh"
+grep -Fqe 'source "$REPO_DIR/lib/install-common.sh"' "$ROOT/skills-personal/install.sh" || fail "M3: skills-personal/install.sh must source lib/install-common.sh"
+if grep -nE '^backup_if_exists\(\)|^install_file_safe\(\)|^install_dir_safe\(\)|^write_skill\(\)' "$ROOT/install.sh" "$ROOT/skills-personal/install.sh"; then
+  fail "M3: do not duplicate install helpers outside lib/install-common.sh"
+fi
+
+# M2: declining a directory overwrite must not merge new files into it.
+M2_SRC=""
+M2_DST=""
+M2_SRC="$(mktemp -d)"
+M2_DST="$(mktemp -d)"
+mkdir -p "$M2_SRC/nested" "$M2_DST/nested"
+printf 'NEW\n' > "$M2_SRC/nested/new.txt"
+printf 'OLD\n' > "$M2_DST/nested/old.txt"
+# shellcheck source=lib/install-common.sh
+source "$ROOT/lib/install-common.sh"
+set +e
+printf 'n\n' | install_dir_safe "$M2_SRC" "$M2_DST" "m2"
+m2_rc=$?
+set -e
+[[ "$m2_rc" -eq 0 ]] || fail "M2: install_dir_safe skip exited $m2_rc"
+grep -Fqe 'OLD' "$M2_DST/nested/old.txt" || fail "M2: skip replaced existing dir contents"
+[[ ! -e "$M2_DST/nested/new.txt" ]] || fail "M2: skip merged new files into existing dir"
+rm -rf "$M2_SRC" "$M2_DST"
 
 # --- standard install.sh (Claude only) ---
 
@@ -224,52 +247,9 @@ for src in "$ROOT/adapters/opencode/agents/"*; do
   assert_file "$ALL_TARGET/.opencode/agents/$(basename "$src")"
 done
 
-# --- install-icm.sh (Claude only) ---
-
-ICM_TARGET="$(mktemp -d)"
-require_safe_empty_target "$ICM_TARGET"
-
-set +e
-run_installer "$ROOT/install-icm.sh" "$ICM_TARGET" "1"
-icm_rc=$?
-set -e
-
-[[ "$icm_rc" -eq 0 ]] || fail "install-icm.sh exited $icm_rc"
-
-assert_file "$ICM_TARGET/CLAUDE.md"
-assert_file "$ICM_TARGET/workflows/dev-workflow/WORKFLOW.md"
-
-for src in "$ROOT/skills/"*.md; do
-  assert_file "$ICM_TARGET/workflows/dev-workflow/skills/$(basename "$src")"
-done
-
-for src in "$ROOT/references/"*.md; do
-  assert_file "$ICM_TARGET/workflows/dev-workflow/references/$(basename "$src")"
-done
-
-for src in "$ROOT/icm/adapters/claude/agents/"*; do
-  [[ -f "$src" ]] || continue
-  assert_file "$ICM_TARGET/.claude/agents/$(basename "$src")"
-done
-
-# --- install-icm.sh (all tools) ---
-
-ICM_ALL_TARGET="$(mktemp -d)"
-require_safe_empty_target "$ICM_ALL_TARGET"
-
-set +e
-run_installer "$ROOT/install-icm.sh" "$ICM_ALL_TARGET" "4"
-icm_all_rc=$?
-set -e
-
-[[ "$icm_all_rc" -eq 0 ]] || fail "install-icm.sh (all tools) exited $icm_all_rc"
-
-assert_file "$ICM_ALL_TARGET/CLAUDE.md"
-assert_file "$ICM_ALL_TARGET/.cursorrules"
-assert_file "$ICM_ALL_TARGET/.opencode/instructions.md"
-for src in "$ROOT/skills/"*.md; do
-  assert_file "$ICM_ALL_TARGET/workflows/dev-workflow/skills/$(basename "$src")"
-done
+# M1: ICM packaging was removed; do not reintroduce a second installer.
+[[ ! -e "$ROOT/install-icm.sh" ]] || fail "M1: install-icm.sh should not exist"
+[[ ! -e "$ROOT/icm" ]] || fail "M1: icm/ should not exist"
 
 # C3: skipping one overwrite must not abort the rest of the install (set -e).
 SKIP_TARGET="$(mktemp -d)"

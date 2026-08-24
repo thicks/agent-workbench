@@ -6,12 +6,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="$ROOT/skills-personal/manifest.json"
 STD_TARGET=""
-ICM_TARGET=""
 STANDALONE_TARGET=""
 
 cleanup() {
   [[ -n "${STD_TARGET:-}" ]] && rm -rf "$STD_TARGET"
-  [[ -n "${ICM_TARGET:-}" ]] && rm -rf "$ICM_TARGET"
   [[ -n "${STANDALONE_TARGET:-}" ]] && rm -rf "$STANDALONE_TARGET"
 }
 trap cleanup EXIT
@@ -69,17 +67,6 @@ assert_local_claude_from_manifest() {
   [[ "$local_count" -gt 0 ]] || fail "manifest contained no local skills"
 }
 
-assert_local_icm_from_manifest() {
-  local target="$1"
-  local name rel filename
-  assert_file "$target/skills-personal/manifest.json"
-  while IFS=$'\t' read -r source name rel filename; do
-    [[ -n "$name" ]] || continue
-    [[ "$source" == "local" ]] || continue
-    assert_file "$target/workflows/dev-workflow/skills/${name}.md"
-  done < <(manifest_entries)
-}
-
 [[ -f "$MANIFEST" ]] || fail "missing $MANIFEST"
 command -v python3 >/dev/null 2>&1 || fail "python3 required to read the manifest"
 
@@ -92,16 +79,6 @@ std_rc=$?
 set -e
 [[ "$std_rc" -eq 0 ]] || fail "install.sh exited $std_rc"
 assert_local_claude_from_manifest "$STD_TARGET"
-
-# --- install-icm.sh still installs local manifest skills ---
-ICM_TARGET="$(mktemp -d)"
-refuse_home_or_repo "$ICM_TARGET"
-set +e
-printf '%s\n' "$ICM_TARGET" "1" "y" | "$ROOT/install-icm.sh"
-icm_rc=$?
-set -e
-[[ "$icm_rc" -eq 0 ]] || fail "install-icm.sh exited $icm_rc"
-assert_local_icm_from_manifest "$ICM_TARGET"
 
 # --- standalone skills-personal/install.sh ---
 STANDALONE_TARGET="$(mktemp -d)"
