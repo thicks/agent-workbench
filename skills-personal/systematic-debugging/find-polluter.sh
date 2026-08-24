@@ -1,63 +1,77 @@
 #!/usr/bin/env bash
-# Bisection script to find which test creates unwanted files/state
-# Usage: ./find-polluter.sh <file_or_dir_to_check> <test_pattern>
-# Example: ./find-polluter.sh '.git' 'src/**/*.test.ts'
+# Linear scan: which test creates POLLUTION_PATH.
+# Usage: ./find-polluter.sh <pollution_path> <name-glob>
+# Example: ./find-polluter.sh .git '*.test.ts'
+#
+# The second argument is a find -name glob (not a globstar path).
+# Override the per-file command with FIND_POLLUTER_RUNNER (default: npm test).
 
-set -e
+set -euo pipefail
 
-if [ $# -ne 2 ]; then
-  echo "Usage: $0 <file_to_check> <test_pattern>"
-  echo "Example: $0 '.git' 'src/**/*.test.ts'"
+if [[ $# -ne 2 ]]; then
+  echo "Usage: $0 <pollution_path> <test-name-glob>" >&2
+  echo "Example: $0 .git '*.test.ts'" >&2
+  echo "Finds files with find . -name <glob>, then runs each through npm test" >&2
+  echo "(or \$FIND_POLLUTER_RUNNER)." >&2
   exit 1
 fi
 
 POLLUTION_CHECK="$1"
 TEST_PATTERN="$2"
 
-echo "🔍 Searching for test that creates: $POLLUTION_CHECK"
-echo "Test pattern: $TEST_PATTERN"
-echo ""
+echo "Searching for a test that creates: $POLLUTION_CHECK"
+echo "find . -name $TEST_PATTERN"
+echo
 
-# Get list of test files
-TEST_FILES=$(find . -path "$TEST_PATTERN" | sort)
-TOTAL=$(echo "$TEST_FILES" | wc -l | tr -d ' ')
+if [[ -e "$POLLUTION_CHECK" ]]; then
+  echo "Pollution already exists before any test ran: $POLLUTION_CHECK" >&2
+  echo "Remove it, then re-run so the scan is not a false negative." >&2
+  exit 1
+fi
 
-echo "Found $TOTAL test files"
-echo ""
+TEST_FILES=()
+while IFS= read -r f; do
+  [[ -n "$f" ]] && TEST_FILES+=("$f")
+done < <(find . -name "$TEST_PATTERN" | LC_ALL=C sort)
+
+if [[ ${#TEST_FILES[@]} -eq 0 ]]; then
+  echo "No test files matched: find . -name $TEST_PATTERN" >&2
+  echo "Use a -name glob such as '*.test.ts', not a path glob like 'src/**/*.test.ts'." >&2
+  exit 1
+fi
+
+echo "Found ${#TEST_FILES[@]} test files"
+echo
+
+run_one() {
+  local test_file="$1"
+  if [[ -n "${FIND_POLLUTER_RUNNER:-}" ]]; then
+    "$FIND_POLLUTER_RUNNER" "$test_file" >/dev/null 2>&1 || true
+  else
+    npm test "$test_file" >/dev/null 2>&1 || true
+  fi
+}
 
 COUNT=0
-for TEST_FILE in $TEST_FILES; do
+FOUND=()
+for TEST_FILE in "${TEST_FILES[@]}"; do
   COUNT=$((COUNT + 1))
-
-  # Skip if pollution already exists
-  if [ -e "$POLLUTION_CHECK" ]; then
-    echo "⚠️  Pollution already exists before test $COUNT/$TOTAL"
-    echo "   Skipping: $TEST_FILE"
-    continue
-  fi
-
-  echo "[$COUNT/$TOTAL] Testing: $TEST_FILE"
-
-  # Run the test
-  npm test "$TEST_FILE" > /dev/null 2>&1 || true
-
-  # Check if pollution appeared
-  if [ -e "$POLLUTION_CHECK" ]; then
-    echo ""
-    echo "🎯 FOUND POLLUTER!"
-    echo "   Test: $TEST_FILE"
-    echo "   Created: $POLLUTION_CHECK"
-    echo ""
-    echo "Pollution details:"
-    ls -la "$POLLUTION_CHECK"
-    echo ""
-    echo "To investigate:"
-    echo "  npm test $TEST_FILE    # Run just this test"
-    echo "  cat $TEST_FILE         # Review test code"
-    exit 1
+  echo "[$COUNT/${#TEST_FILES[@]}] Testing: $TEST_FILE"
+  run_one "$TEST_FILE"
+  if [[ -e "$POLLUTION_CHECK" ]]; then
+    FOUND+=("$TEST_FILE")
+    echo "  polluter: $TEST_FILE"
+    rm -rf "$POLLUTION_CHECK"
   fi
 done
 
-echo ""
-echo "✅ No polluter found - all tests clean!"
+if [[ ${#FOUND[@]} -gt 0 ]]; then
+  echo
+  echo "FOUND ${#FOUND[@]} polluter(s):"
+  printf '  %s\n' "${FOUND[@]}"
+  exit 1
+fi
+
+echo
+echo "No polluter found — all matched tests left $POLLUTION_CHECK absent."
 exit 0

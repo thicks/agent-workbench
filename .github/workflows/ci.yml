@@ -11,13 +11,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck install.sh lib/install-common.sh skills-personal/install.sh hooks/pre-push
-          shellcheck --severity=warning tests/install-smoke.sh tests/install-personal-manifest.sh tests/run-sandbox.sh
+          shellcheck install.sh uninstall.sh lib/install-common.sh skills-personal/install.sh hooks/pre-push skills-personal/systematic-debugging/find-polluter.sh
+          shellcheck --severity=warning tests/install-smoke.sh tests/install-personal-manifest.sh tests/run-sandbox.sh tests/find-polluter.sh
       - name: Docs and uniqueness
         run: |
           python3 tests/check-docs.py
           python3 tests/check-duplicates.py
-      - name: Clean-install smoke
-        run: ./tests/install-smoke.sh
+      - name: Find-polluter
+        run: ./tests/find-polluter.sh
       - name: Personal manifest install
         run: ./tests/install-personal-manifest.sh

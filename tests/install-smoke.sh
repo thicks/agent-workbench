@@ -108,7 +108,7 @@ run_installer() {
   local script="$1"
   local target="$2"
   local tool="$3"
-  printf '%s\n' "$target" "$tool" "y" | "$script"
+  "$script" --yes --target "$target" --tool "$tool"
 }
 
 # Portable C1 guard: GNU bash aborts on ((x++)) when x is 0 under set -e.
@@ -276,5 +276,48 @@ grep -Fqe 'OLD-SKILL' "$SKIP_TARGET/.claude/skills/code-review/SKILL.md" || fail
 assert_file "$SKIP_TARGET/.claude/skills/incept/SKILL.md"
 assert_file "$SKIP_TARGET/.claude/agents/task-executor.md"
 assert_file "$SKIP_TARGET/.claude/settings.json"
+
+# N4: empty directory glob must not abort (src and dest must be distinct).
+N4_SRC="$(mktemp -d)"
+N4_DST="$(mktemp -d)"
+install_dir_safe "$N4_SRC" "$N4_DST/out" "empty" || fail "N4: empty src dir should be a no-op"
+rm -rf "$N4_SRC" "$N4_DST"
+
+# N4: refuse $HOME without --force-home.
+HOME_ERR="$(mktemp)"
+set +e
+"$ROOT/install.sh" --yes --target "$HOME" --tool 1 >/dev/null 2>"$HOME_ERR"
+home_rc=$?
+set -e
+[[ "$home_rc" -ne 0 ]] || fail "N4: install into \$HOME should be refused"
+grep -Fqe 'Refusing to install' "$HOME_ERR" || fail "N4: expected refuse-home message"
+rm -f "$HOME_ERR"
+
+# N4: --dry-run writes nothing.
+DRY_TARGET="$(mktemp -d)"
+require_safe_empty_target "$DRY_TARGET"
+set +e
+"$ROOT/install.sh" --yes --dry-run --target "$DRY_TARGET" --tool 1 >/dev/null
+dry_rc=$?
+set -e
+[[ "$dry_rc" -eq 0 ]] || fail "N4: dry-run exited $dry_rc"
+[[ ! -e "$DRY_TARGET/.claude" ]] || fail "N4: dry-run created .claude"
+rm -rf "$DRY_TARGET"
+
+# N4: comma tool list + install manifest + uninstall.
+FLAG_TARGET="$(mktemp -d)"
+require_safe_empty_target "$FLAG_TARGET"
+set +e
+"$ROOT/install.sh" --yes --target "$FLAG_TARGET" --tool 1,2 >/dev/null
+flag_rc=$?
+set -e
+[[ "$flag_rc" -eq 0 ]] || fail "N4: --tool 1,2 exited $flag_rc"
+assert_file "$FLAG_TARGET/.claude/skills/incept/SKILL.md"
+assert_file "$FLAG_TARGET/.cursorrules"
+[[ ! -e "$FLAG_TARGET/.opencode/instructions.md" ]] || fail "N4: tool 1,2 installed opencode"
+assert_file "$FLAG_TARGET/.agent-workbench-installed.txt"
+"$ROOT/uninstall.sh" "$FLAG_TARGET"
+[[ ! -e "$FLAG_TARGET/.claude/skills/incept/SKILL.md" ]] || fail "N4: uninstall left skill files"
+rm -rf "$FLAG_TARGET"
 
 echo "PASS: clean-install smoke test"
