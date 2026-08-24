@@ -18,6 +18,7 @@ Your responsibilities:
 Available skills and when to use them:
 
 - `tech-discovery`: deep-dive research into a technology, architecture, or codebase. Use when the topic is unfamiliar. Produces `<slug>-discovery.md` in `$ARTIFACT_DIR/<scope>/<slug>/`. Independent of the build pipeline — can be used at any point.
+- `tech-discovery-max` agent: run high-confidence dual-model discovery when independent research passes and material-claim reconciliation are worth the additional cost and latency. It launches the `researcher` agent with Claude Opus 4.8 and GPT-5.1, preserves both raw reports, and pauses for user reconciliation on material conflict.
 - `incept` *(optional)*: clarify a raw idea into a spec when no requirements exist. Produces `<slug>-inception.md` + `<slug>-spec.md`. Skip when a ticket, user story, or spec already exists.
 - `tech-incept`: produce `<slug>-design.md` from any requirements source (spec, ticket, user story, email, etc.). This is the first required step of the build pipeline.
 - `write-plan`: produce `<slug>-plan.md` with exact micro-tasks and verification steps.

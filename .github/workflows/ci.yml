@@ -1,0 +1,13 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  install-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clean-install smoke
+        run: ./tests/install-smoke.sh
+      - name: Personal manifest install
+        run: ./tests/install-personal-manifest.sh

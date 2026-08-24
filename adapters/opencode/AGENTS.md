@@ -3,6 +3,10 @@
 This project uses the agent-workbench standard dev-workflow. Detailed
 instructions live in `.opencode/instructions.md`.
 
+The `tech-discovery-max` primary agent orchestrates two independent `researcher`
+subagents using the fixed OpenRouter model pair and pauses for user
+reconciliation when material claims conflict.
+
 ## Pipeline
 
 `incept` → `tech-incept` → `tech-discovery` (optional) → `write-plan` →

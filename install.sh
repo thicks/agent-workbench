@@ -121,8 +121,6 @@ install_dir_safe() {
   fi
 
   mkdir -p "$dest_dir"
-  local file_count=0
-  local skip_count=0
 
   for src_file in "$src_dir"/*; do
     local filename="$(basename "$src_file")"
@@ -131,19 +129,79 @@ install_dir_safe() {
     if [[ -d "$src_file" ]]; then
       # Recursive for subdirectories
       if [[ -d "$dest_file" ]]; then
-        prompt_overwrite "$dest_file" "$desc/$filename" || { ((skip_count++)); continue; }
+        prompt_overwrite "$dest_file" "$desc/$filename" || continue
         rm -rf "$dest_file"
       fi
       cp -R "$src_file" "$dest_file"
       echo "  installed: $desc/$filename/"
     else
-      if install_file_safe "$src_file" "$dest_file" "$desc/$filename"; then
-        ((file_count++))
-      else
-        ((skip_count++))
-      fi
+      install_file_safe "$src_file" "$dest_file" "$desc/$filename" || true
     fi
   done
+}
+
+PERSONAL_DIR="$REPO_DIR/skills-personal"
+PERSONAL_MANIFEST="$PERSONAL_DIR/manifest.json"
+
+# Local personal skills are directories with SKILL.md listed in the manifest.
+# Remote manifest entries are not cloned here (sandbox/offline safe).
+each_local_personal_skill() {
+  local dir name
+  [[ -f "$PERSONAL_MANIFEST" ]] || return 0
+  for dir in "$PERSONAL_DIR"/*/; do
+    [[ -d "$dir" ]] || continue
+    name="$(basename "$dir")"
+    [[ -f "$dir/SKILL.md" ]] || continue
+    grep -q "\"skill\": \"$name\"" "$PERSONAL_MANIFEST" || continue
+    printf '%s\n' "$name"
+  done
+}
+
+install_personal_manifest() {
+  [[ -f "$PERSONAL_MANIFEST" ]] || return 0
+  mkdir -p "$TARGET/skills-personal"
+  install_file_safe "$PERSONAL_MANIFEST" "$TARGET/skills-personal/manifest.json" "skills-personal/manifest.json"
+}
+
+install_personal_claude() {
+  local name src dest_dir extra
+  install_personal_manifest
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    src="$PERSONAL_DIR/$name/SKILL.md"
+    dest_dir="$TARGET/.claude/skills/$name"
+    mkdir -p "$dest_dir"
+    install_file_safe "$src" "$dest_dir/SKILL.md" ".claude/skills/$name/SKILL.md" || true
+    for extra in "$PERSONAL_DIR/$name"/*; do
+      [[ -f "$extra" ]] || continue
+      [[ "$(basename "$extra")" == "SKILL.md" ]] && continue
+      install_file_safe "$extra" "$dest_dir/$(basename "$extra")" ".claude/skills/$name/$(basename "$extra")" || true
+    done
+  done < <(each_local_personal_skill)
+}
+
+install_personal_cursor() {
+  local name src
+  install_personal_manifest
+  mkdir -p "$TARGET/.cursor/rules"
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    src="$PERSONAL_DIR/$name/SKILL.md"
+    write_skill "$TARGET/.cursor/rules/${name}.mdc" ".cursor/rules/${name}.mdc" "$(skill_body "$src")" \
+      "description: $(skill_field "$src" description)" "alwaysApply: false"
+  done < <(each_local_personal_skill)
+}
+
+install_personal_opencode() {
+  local name src
+  install_personal_manifest
+  mkdir -p "$TARGET/.opencode/skills"
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    src="$PERSONAL_DIR/$name/SKILL.md"
+    write_skill "$TARGET/.opencode/skills/${name}.md" ".opencode/skills/${name}.md" "$(skill_body "$src")" \
+      "name: $(skill_field "$src" name)" "description: $(skill_field "$src" description)"
+  done < <(each_local_personal_skill)
 }
 
 install_claude() {
@@ -173,6 +231,8 @@ install_claude() {
   if [[ -f "$REPO_DIR/adapters/claude/settings.local.json.example" ]]; then
     install_file_safe "$REPO_DIR/adapters/claude/settings.local.json.example" "$TARGET/.claude/settings.local.json.example" ".claude/settings.local.json.example"
   fi
+
+  install_personal_claude
 }
 
 install_cursor() {
@@ -181,6 +241,7 @@ install_cursor() {
   install_file_safe "$REPO_DIR/adapters/cursor/.cursorrules" "$TARGET/.cursorrules" ".cursorrules"
 
   mkdir -p "$TARGET/.cursor/rules"
+  install_dir_safe "$REPO_DIR/adapters/cursor/agents" "$TARGET/.cursor/agents" ".cursor/agents"
   install_file_safe "$REPO_DIR/adapters/claude/rules/30-artifact-dir.md" "$TARGET/.cursor/rules/30-artifact-dir.mdc" ".cursor/rules/30-artifact-dir.mdc"
 
   # Render each skill as a Cursor rule: description + alwaysApply
@@ -189,6 +250,8 @@ install_cursor() {
     lines=("description: $(skill_field "$src" description)" "alwaysApply: false")
     write_skill "$TARGET/.cursor/rules/$name.mdc" ".cursor/rules/$name.mdc" "$(skill_body "$src")" "${lines[@]}"
   done
+
+  install_personal_cursor
 }
 
 install_opencode() {
@@ -197,6 +260,7 @@ install_opencode() {
   install_file_safe "$REPO_DIR/adapters/opencode/AGENTS.md" "$TARGET/AGENTS.md" "AGENTS.md"
 
   mkdir -p "$TARGET/.opencode/skills"
+  install_dir_safe "$REPO_DIR/adapters/opencode/agents" "$TARGET/.opencode/agents" ".opencode/agents"
   install_file_safe "$REPO_DIR/adapters/opencode/instructions.md" "$TARGET/.opencode/instructions.md" ".opencode/instructions.md"
 
   # Render each skill as an opencode skill: name + description
@@ -205,6 +269,8 @@ install_opencode() {
     lines=("name: $(skill_field "$src" name)" "description: $(skill_field "$src" description)")
     write_skill "$TARGET/.opencode/skills/$name.md" ".opencode/skills/$name.md" "$(skill_body "$src")" "${lines[@]}"
   done
+
+  install_personal_opencode
 }
 
 case "$TOOL" in
