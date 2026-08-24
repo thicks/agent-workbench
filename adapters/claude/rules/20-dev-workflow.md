@@ -13,5 +13,10 @@
   - `<slug>-plan.md`
 - Save planning artifacts to `$ARTIFACT_DIR/<scope>/<slug>/` per `30-artifact-dir.md`.
 - Before `execute-plan`, ensure plan approval exists or ask for approval.
+- On-demand quality gates (not automatic; invoke when needed):
+  - `spec-review` — is this spec ready for engineering?
+  - `plan-review` — is this plan detailed enough for a junior engineer?
+  - `code-review` — review these changes for correctness, security, and style
+  - `fix-failing-tests` — tests are broken; diagnose and fix
 - During execution, validate changed areas and summarize files, checks, and risks.
 - Before pushing, always check `gh pr view HEAD --json state` to verify the branch's PR is not already merged or closed. Never push to a branch whose PR has been merged — create a new branch instead.

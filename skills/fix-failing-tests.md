@@ -1,3 +1,9 @@
+---
+name: fix-failing-tests
+description: "Diagnose and fix failing tests. Use when tests are broken and need root-cause analysis and a targeted fix — not a broad refactor."
+allowed-tools: Bash(pnpm:*), Bash(npm:*), Bash(npx:*), Bash(git:*), Read, Edit, Grep
+---
+
 # Fix Failing Tests
 
 Diagnose and fix failing tests with minimal, scoped changes.
