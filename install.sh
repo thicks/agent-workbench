@@ -40,26 +40,44 @@ prompt_overwrite() {
   read -rp "  Overwrite? [y/N/b=backup only] " resp
   case "$resp" in
     [Yy]) return 0 ;;
-    [Bb]) backup_if_exists "$target"; return 1 ;;
-    *) echo "  skipped"; return 1 ;;
+    [Bb]) backup_if_exists "$target"; return 2 ;;
+    *) echo "  skipped"; return 2 ;;
   esac
+}
+
+# 0 = installed/unchanged, 2 = user skipped, 1 = real failure.
+# Skip must not trip set -e at bare call sites.
+ok_or_skip() {
+  local st=0
+  "$@" || st=$?
+  [[ "$st" -eq 0 || "$st" -eq 2 ]]
 }
 
 install_file_safe() {
   local src="$1"
   local dest="$2"
   local desc="${3:-$(basename "$dest")}"
+  local st=0
+
+  if [[ ! -f "$src" ]]; then
+    echo "  missing source: $src" >&2
+    return 1
+  fi
 
   if [[ -e "$dest" ]]; then
     if cmp -s "$src" "$dest"; then
       echo "  unchanged: $desc"
       return 0
     fi
-    prompt_overwrite "$dest" "$desc" || return 1
+    prompt_overwrite "$dest" "$desc" || {
+      st=$?
+      [[ "$st" -eq 2 ]] && return 2
+      return "$st"
+    }
   fi
 
-  mkdir -p "$(dirname "$dest")"
-  cp "$src" "$dest"
+  mkdir -p "$(dirname "$dest")" || return 1
+  cp "$src" "$dest" || return 1
   echo "  installed: $desc"
 }
 
@@ -80,14 +98,25 @@ skill_field() {
 }
 
 skill_body() {
-  awk '/^---$/{c++; next} c>=2' "$1" | sed '/./,$!d'
+  # Drop only the opening YAML frontmatter (first two --- lines). Later ---
+  # lines are section rules or fenced examples and must be kept so tools still
+  # see a single leading frontmatter pair plus the original body.
+  awk '
+    /^---$/ && done == 0 {
+      c++
+      if (c == 2) done = 1
+      next
+    }
+    done { print }
+  ' "$1" | sed '/./,$!d'
 }
 
 # write_skill <dest> <label> <body> <frontmatter-line>...
 write_skill() {
   local dest="$1" label="$2" body="$3"; shift 3
+  local st=0
 
-  mkdir -p "$(dirname "$dest")"
+  mkdir -p "$(dirname "$dest")" || return 1
   local tmp_file
   tmp_file=$(mktemp)
   {
@@ -104,10 +133,15 @@ write_skill() {
       rm "$tmp_file"
       return 0
     fi
-    prompt_overwrite "$dest" "$label" || { rm "$tmp_file"; return 1; }
+    prompt_overwrite "$dest" "$label" || {
+      st=$?
+      rm -f "$tmp_file"
+      [[ "$st" -eq 2 ]] && return 2
+      return "$st"
+    }
   fi
 
-  mv "$tmp_file" "$dest"
+  mv "$tmp_file" "$dest" || return 1
   echo "  rendered: $label"
 }
 
@@ -132,10 +166,10 @@ install_dir_safe() {
         prompt_overwrite "$dest_file" "$desc/$filename" || continue
         rm -rf "$dest_file"
       fi
-      cp -R "$src_file" "$dest_file"
+      cp -R "$src_file" "$dest_file" || return 1
       echo "  installed: $desc/$filename/"
     else
-      install_file_safe "$src_file" "$dest_file" "$desc/$filename" || true
+      ok_or_skip install_file_safe "$src_file" "$dest_file" "$desc/$filename"
     fi
   done
 }
@@ -160,7 +194,7 @@ each_local_personal_skill() {
 install_personal_manifest() {
   [[ -f "$PERSONAL_MANIFEST" ]] || return 0
   mkdir -p "$TARGET/skills-personal"
-  install_file_safe "$PERSONAL_MANIFEST" "$TARGET/skills-personal/manifest.json" "skills-personal/manifest.json"
+  ok_or_skip install_file_safe "$PERSONAL_MANIFEST" "$TARGET/skills-personal/manifest.json" "skills-personal/manifest.json"
 }
 
 install_personal_claude() {
@@ -171,11 +205,11 @@ install_personal_claude() {
     src="$PERSONAL_DIR/$name/SKILL.md"
     dest_dir="$TARGET/.claude/skills/$name"
     mkdir -p "$dest_dir"
-    install_file_safe "$src" "$dest_dir/SKILL.md" ".claude/skills/$name/SKILL.md" || true
+    ok_or_skip install_file_safe "$src" "$dest_dir/SKILL.md" ".claude/skills/$name/SKILL.md"
     for extra in "$PERSONAL_DIR/$name"/*; do
       [[ -f "$extra" ]] || continue
       [[ "$(basename "$extra")" == "SKILL.md" ]] && continue
-      install_file_safe "$extra" "$dest_dir/$(basename "$extra")" ".claude/skills/$name/$(basename "$extra")" || true
+      ok_or_skip install_file_safe "$extra" "$dest_dir/$(basename "$extra")" ".claude/skills/$name/$(basename "$extra")"
     done
   done < <(each_local_personal_skill)
 }
@@ -187,7 +221,7 @@ install_personal_cursor() {
   while IFS= read -r name; do
     [[ -n "$name" ]] || continue
     src="$PERSONAL_DIR/$name/SKILL.md"
-    write_skill "$TARGET/.cursor/rules/${name}.mdc" ".cursor/rules/${name}.mdc" "$(skill_body "$src")" \
+    ok_or_skip write_skill "$TARGET/.cursor/rules/${name}.mdc" ".cursor/rules/${name}.mdc" "$(skill_body "$src")" \
       "description: $(skill_field "$src" description)" "alwaysApply: false"
   done < <(each_local_personal_skill)
 }
@@ -199,7 +233,7 @@ install_personal_opencode() {
   while IFS= read -r name; do
     [[ -n "$name" ]] || continue
     src="$PERSONAL_DIR/$name/SKILL.md"
-    write_skill "$TARGET/.opencode/skills/${name}.md" ".opencode/skills/${name}.md" "$(skill_body "$src")" \
+    ok_or_skip write_skill "$TARGET/.opencode/skills/${name}.md" ".opencode/skills/${name}.md" "$(skill_body "$src")" \
       "name: $(skill_field "$src" name)" "description: $(skill_field "$src" description)"
   done < <(each_local_personal_skill)
 }
@@ -215,7 +249,7 @@ install_claude() {
     lines=("name: $(skill_field "$src" name)" "description: $(skill_field "$src" description)")
     allowed="$(skill_field "$src" allowed-tools)"
     [[ -n "$allowed" ]] && lines+=("allowed-tools: $allowed")
-    write_skill "$TARGET/.claude/skills/$name/SKILL.md" ".claude/skills/$name/SKILL.md" "$(skill_body "$src")" "${lines[@]}"
+    ok_or_skip write_skill "$TARGET/.claude/skills/$name/SKILL.md" ".claude/skills/$name/SKILL.md" "$(skill_body "$src")" "${lines[@]}"
   done
 
   # Copy agents, commands, rules
@@ -226,10 +260,10 @@ install_claude() {
   done
 
   # Copy settings files
-  install_file_safe "$REPO_DIR/adapters/claude/settings.json" "$TARGET/.claude/settings.json" ".claude/settings.json"
+  ok_or_skip install_file_safe "$REPO_DIR/adapters/claude/settings.json" "$TARGET/.claude/settings.json" ".claude/settings.json"
 
   if [[ -f "$REPO_DIR/adapters/claude/settings.local.json.example" ]]; then
-    install_file_safe "$REPO_DIR/adapters/claude/settings.local.json.example" "$TARGET/.claude/settings.local.json.example" ".claude/settings.local.json.example"
+    ok_or_skip install_file_safe "$REPO_DIR/adapters/claude/settings.local.json.example" "$TARGET/.claude/settings.local.json.example" ".claude/settings.local.json.example"
   fi
 
   install_personal_claude
@@ -238,17 +272,17 @@ install_claude() {
 install_cursor() {
   echo
   echo "Installing Cursor adapter..."
-  install_file_safe "$REPO_DIR/adapters/cursor/.cursorrules" "$TARGET/.cursorrules" ".cursorrules"
+  ok_or_skip install_file_safe "$REPO_DIR/adapters/cursor/.cursorrules" "$TARGET/.cursorrules" ".cursorrules"
 
   mkdir -p "$TARGET/.cursor/rules"
   install_dir_safe "$REPO_DIR/adapters/cursor/agents" "$TARGET/.cursor/agents" ".cursor/agents"
-  install_file_safe "$REPO_DIR/adapters/claude/rules/30-artifact-dir.md" "$TARGET/.cursor/rules/30-artifact-dir.mdc" ".cursor/rules/30-artifact-dir.mdc"
+  ok_or_skip install_file_safe "$REPO_DIR/adapters/claude/rules/30-artifact-dir.md" "$TARGET/.cursor/rules/30-artifact-dir.mdc" ".cursor/rules/30-artifact-dir.mdc"
 
   # Render each skill as a Cursor rule: description + alwaysApply
   for src in "$REPO_DIR/skills/"*.md; do
     name="$(basename "$src" .md)"
     lines=("description: $(skill_field "$src" description)" "alwaysApply: false")
-    write_skill "$TARGET/.cursor/rules/$name.mdc" ".cursor/rules/$name.mdc" "$(skill_body "$src")" "${lines[@]}"
+    ok_or_skip write_skill "$TARGET/.cursor/rules/$name.mdc" ".cursor/rules/$name.mdc" "$(skill_body "$src")" "${lines[@]}"
   done
 
   install_personal_cursor
@@ -257,17 +291,17 @@ install_cursor() {
 install_opencode() {
   echo
   echo "Installing opencode adapter..."
-  install_file_safe "$REPO_DIR/adapters/opencode/AGENTS.md" "$TARGET/AGENTS.md" "AGENTS.md"
+  ok_or_skip install_file_safe "$REPO_DIR/adapters/opencode/AGENTS.md" "$TARGET/AGENTS.md" "AGENTS.md"
 
   mkdir -p "$TARGET/.opencode/skills"
   install_dir_safe "$REPO_DIR/adapters/opencode/agents" "$TARGET/.opencode/agents" ".opencode/agents"
-  install_file_safe "$REPO_DIR/adapters/opencode/instructions.md" "$TARGET/.opencode/instructions.md" ".opencode/instructions.md"
+  ok_or_skip install_file_safe "$REPO_DIR/adapters/opencode/instructions.md" "$TARGET/.opencode/instructions.md" ".opencode/instructions.md"
 
   # Render each skill as an opencode skill: name + description
   for src in "$REPO_DIR/skills/"*.md; do
     name="$(basename "$src" .md)"
     lines=("name: $(skill_field "$src" name)" "description: $(skill_field "$src" description)")
-    write_skill "$TARGET/.opencode/skills/$name.md" ".opencode/skills/$name.md" "$(skill_body "$src")" "${lines[@]}"
+    ok_or_skip write_skill "$TARGET/.opencode/skills/$name.md" ".opencode/skills/$name.md" "$(skill_body "$src")" "${lines[@]}"
   done
 
   install_personal_opencode
