@@ -58,8 +58,10 @@ installer or skill set enforces sequence.
 | **opencode** | Copies `AGENTS.md` and `instructions.md`. Skills become `.opencode/skills/<name>.md`. |
 
 **Why tool-neutral bodies?** Writing skill content once avoids drift across
-tools. Trigger phrases and descriptions live in the skill's own YAML
-frontmatter; each adapter keeps only the fields that tool understands.
+tools. Each `skills/<name>.md` starts with YAML frontmatter. `install.sh`
+reads `name`, `description`, and `allowed-tools` from that document and
+writes only the fields each tool understands. There is no
+`adapters/claude/skills/` directory and no `*.header.md` rendering layer.
 
 ## Pipeline
 

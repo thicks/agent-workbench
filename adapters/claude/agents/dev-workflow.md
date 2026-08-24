@@ -1,6 +1,6 @@
 ---
 name: dev-workflow
-description: Manages Trey's end-to-end agentic workflow from discovery through autonomous execution.
+description: Manages the end-to-end agentic workflow from discovery through autonomous execution.
 tools: Read, Write, Edit, Glob, Grep, Bash
 skills: tech-discovery, incept, tech-incept, write-plan, execute-plan, github-pr-description, watch-github-pr, agent-browser
 model: sonnet

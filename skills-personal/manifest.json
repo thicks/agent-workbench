@@ -1,15 +1,7 @@
 {
   "version": "1.0",
-  "description": "Manifest of personal skills to install. Remote entries (source: remote) are cloned from a repo; local entries (source: local) are vendored in a subdirectory alongside this manifest. The install script prompts before adding each one.",
+  "description": "Manifest of personal skills to install. Remote entries (source: remote) are cloned from a repo; local entries (source: local) are vendored in a subdirectory alongside this manifest. The install script prompts before adding each one. Do not list a name that already exists in skills/.",
   "skills": [
-    {
-      "skill": "drawio",
-      "source": "remote",
-      "repo": "https://github.com/Agents365-ai/drawio-skill",
-      "file": "drawio.md",
-      "description": "Create, edit, and manage diagrams with Draw.io integration. Supports embedding diagrams in artifacts for documentation, planning, and design.",
-      "tags": ["visualization", "diagrams", "documentation"]
-    },
     {
       "skill": "system-issue-analysis",
       "source": "local",
@@ -33,14 +25,6 @@
       "file": "SKILL.md",
       "description": "Automate browser interactions for local app testing, form filling, screenshots, and UI verification. Use when the user asks to test flows in a browser.",
       "tags": ["browser", "testing", "automation"]
-    },
-    {
-      "skill": "fix-failing-tests",
-      "source": "local",
-      "path": "fix-failing-tests",
-      "file": "SKILL.md",
-      "description": "Diagnose and fix failing tests. Use when tests are broken and need root-cause analysis and a targeted fix — not a broad refactor.",
-      "tags": ["testing", "debugging"]
     },
     {
       "skill": "git-pr",

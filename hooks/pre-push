@@ -1,0 +1,15 @@
+#!/bin/sh
+# Refuse pushes of main/master. Install into .git/hooks/pre-push.
+# Branch protection on GitHub is still required; this is a local backstop.
+
+while read -r local_ref _ remote_ref _; do
+  [ -n "$local_ref" ] || continue
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      echo "pre-push: refusing to push $remote_ref (use a feature branch + PR)" >&2
+      exit 1
+      ;;
+  esac
+done
+
+exit 0

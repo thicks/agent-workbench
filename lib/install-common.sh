@@ -34,7 +34,8 @@ ok_or_skip() {
 install_file_safe() {
   local src="$1"
   local dest="$2"
-  local desc="${3:-$(basename "$dest")}"
+  local desc
+  desc="${3:-$(basename "$dest")}"
   local st=0
 
   if [[ ! -f "$src" ]]; then
@@ -132,8 +133,9 @@ install_dir_safe() {
   mkdir -p "$dest_dir"
 
   for src_file in "$src_dir"/*; do
-    local filename="$(basename "$src_file")"
-    local dest_file="$dest_dir/$filename"
+    local filename dest_file
+    filename="$(basename "$src_file")"
+    dest_file="$dest_dir/$filename"
 
     if [[ -d "$src_file" ]]; then
       if [[ -d "$dest_file" ]]; then

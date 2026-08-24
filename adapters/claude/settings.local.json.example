@@ -1,6 +1,6 @@
 {
   "env": {
-    "ARTIFACT_DIR": "~/dev/thickideas/notes/1-Projects",
+    "ARTIFACT_DIR": "/absolute/path/to/your/artifact-dir",
     "ARTIFACT_DIR_STRIP_SEGMENTS": "dev"
   }
 }

@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/install-common.sh
 source "$REPO_DIR/lib/install-common.sh"
-MANIFEST_FILE="$SCRIPT_DIR/manifest.json"
+MANIFEST_FILE="${MANIFEST_FILE:-$SCRIPT_DIR/manifest.json}"
 TARGET="${TARGET:-$PWD}"
 SKILLS_DIR="${SKILLS_DIR:-$TARGET/.claude/skills}"
 NONINTERACTIVE="${NONINTERACTIVE:-0}"
