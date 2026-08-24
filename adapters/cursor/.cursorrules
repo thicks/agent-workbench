@@ -4,6 +4,10 @@ This project uses the agent-workbench standard dev-workflow. Skills live in
 `.cursor/rules/` (installed from `skills/` + `adapters/claude/rules/` in the
 agent-workbench repo).
 
+The `tech-discovery-max` subagent orchestrates two independent `researcher`
+subagents using the fixed OpenRouter model pair and pauses for user
+reconciliation when material claims conflict.
+
 ## Pipeline
 
 `incept` → `tech-incept` → `tech-discovery` (optional) → `write-plan` →

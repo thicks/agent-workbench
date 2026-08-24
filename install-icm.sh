@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ICM_DIR="$REPO_DIR/icm"
 
-echo "agent-workbench — ICM install"
+echo "agent-workbench — ICM install" 
 echo "=============================="
 echo
 
@@ -74,8 +74,6 @@ install_dir_safe() {
   fi
 
   mkdir -p "$dest_dir"
-  local file_count=0
-  local skip_count=0
 
   for src_file in "$src_dir"/*; do
     local filename="$(basename "$src_file")"
@@ -84,17 +82,13 @@ install_dir_safe() {
     if [[ -d "$src_file" ]]; then
       # Recursive for subdirectories
       if [[ -d "$dest_file" ]]; then
-        prompt_overwrite "$dest_file" "$desc/$filename" || { ((skip_count++)); continue; }
+        prompt_overwrite "$dest_file" "$desc/$filename" || continue
         rm -rf "$dest_file"
       fi
       cp -R "$src_file" "$dest_file"
       echo "  installed: $desc/$filename/"
     else
-      if install_file_safe "$src_file" "$dest_file" "$desc/$filename"; then
-        ((file_count++))
-      else
-        ((skip_count++))
-      fi
+      install_file_safe "$src_file" "$dest_file" "$desc/$filename" || true
     fi
   done
 }
@@ -117,6 +111,21 @@ for skill_file in "$REPO_DIR/skills/"*.md; do
   filename="$(basename "$skill_file")"
   install_file_safe "$skill_file" "$TARGET/workflows/dev-workflow/skills/$filename" "workflows/dev-workflow/skills/$filename"
 done
+
+PERSONAL_DIR="$REPO_DIR/skills-personal"
+PERSONAL_MANIFEST="$PERSONAL_DIR/manifest.json"
+if [[ -f "$PERSONAL_MANIFEST" ]]; then
+  mkdir -p "$TARGET/skills-personal"
+  install_file_safe "$PERSONAL_MANIFEST" "$TARGET/skills-personal/manifest.json" "skills-personal/manifest.json"
+  mkdir -p "$TARGET/workflows/dev-workflow/skills"
+  for dir in "$PERSONAL_DIR"/*/; do
+    [[ -d "$dir" ]] || continue
+    name="$(basename "$dir")"
+    [[ -f "$dir/SKILL.md" ]] || continue
+    grep -q "\"skill\": \"$name\"" "$PERSONAL_MANIFEST" || continue
+    install_file_safe "$dir/SKILL.md" "$TARGET/workflows/dev-workflow/skills/${name}.md" "workflows/dev-workflow/skills/${name}.md" || true
+  done
+fi
 
 mkdir -p "$TARGET/workflows/dev-workflow/references"
 for ref_file in "$REPO_DIR/references/"*.md; do
