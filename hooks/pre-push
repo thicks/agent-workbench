@@ -1,0 +1,25 @@
+#!/bin/sh
+# Refuse pushes of main/master and force pushes. Install into .git/hooks/pre-push.
+# Branch protection on GitHub is still required; this is a local backstop.
+
+remote="$1"
+
+if [ "$remote" = "origin" ] || [ -n "$remote" ]; then
+  :
+fi
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "$local_ref" ] || continue
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      echo "pre-push: refusing to push $remote_ref (use a feature branch + PR)" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# GIT_PUSH_OPTION / command line force is not visible here for all clients.
+# Block update of main via the ref list above. Force-push of a feature branch
+# is a workflow choice; GitHub should deny force to protected default branches.
+
+exit 0

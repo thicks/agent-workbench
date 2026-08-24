@@ -4,8 +4,16 @@
 
 - Never commit directly to `main` or `master`.
 - Create feature branches for all work: `feat/<slug>` or `<TICKET-ID>/<slug>`.
-- Push only to feature branches — pushes to `main`/`master` are blocked.
-- Force pushes are blocked.
+- Push only to feature branches — pushes to `main`/`master` are blocked
+  locally by `hooks/pre-push` (copied into a target's `.git/hooks/` when
+  that repo is a git checkout). Protect `main` on GitHub as well:
+  **Settings → Branches → Add rule** for `main` (require a pull request,
+  dismiss stale reviews, no force push). A deny list in
+  `settings.json` is not branch protection; the agent can edit that file.
+
+- Force pushes to the default branch are blocked by GitHub rules and by
+  Claude `deny` entries for `--force` / `-f`. Do not treat those strings
+  as complete.
 
 ## Push Safety
 

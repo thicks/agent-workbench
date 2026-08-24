@@ -172,3 +172,11 @@ esac
 echo
 echo "Done. agent-workbench installed at $TARGET."
 echo "Set \$ARTIFACT_DIR via .claude/settings.local.json, project .env, or your shell."
+
+if [[ -d "$TARGET/.git" && -f "$REPO_DIR/hooks/pre-push" ]]; then
+  mkdir -p "$TARGET/.git/hooks"
+  ok_or_skip install_file_safe "$REPO_DIR/hooks/pre-push" "$TARGET/.git/hooks/pre-push" ".git/hooks/pre-push"
+  if [[ -f "$TARGET/.git/hooks/pre-push" ]]; then
+    chmod +x "$TARGET/.git/hooks/pre-push" || true
+  fi
+fi

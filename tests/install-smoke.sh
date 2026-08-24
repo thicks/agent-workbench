@@ -187,6 +187,17 @@ assert_file "$STD_TARGET/.claude/agents/task-executor.md"
 assert_file "$STD_TARGET/.claude/commands/incept.md"
 assert_file "$STD_TARGET/.claude/rules/30-artifact-dir.md"
 
+# M7: second install into the same tree must be idempotent (cmp -s → unchanged).
+set +e
+idem_out="$(run_installer "$ROOT/install.sh" "$STD_TARGET" "1" 2>&1)"
+idem_rc=$?
+set -e
+[[ "$idem_rc" -eq 0 ]] || fail "install.sh idempotent rerun exited $idem_rc"
+if echo "$idem_out" | grep -E '^  (installed|rendered):'; then
+  fail "M7: second install into the same dir wrote files (expected only unchanged)"
+fi
+echo "$idem_out" | grep -Fq 'unchanged:' || fail "M7: second install reported no unchanged files"
+
 # Second clean install into a fresh empty dir (regression: C1 can false-green on macOS).
 STD_TARGET2="$(mktemp -d)"
 require_safe_empty_target "$STD_TARGET2"

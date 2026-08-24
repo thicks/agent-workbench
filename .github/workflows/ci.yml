@@ -7,6 +7,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck install.sh lib/install-common.sh skills-personal/install.sh hooks/pre-push
+          shellcheck --severity=warning tests/install-smoke.sh tests/install-personal-manifest.sh tests/run-sandbox.sh
+      - name: Docs and uniqueness
+        run: |
+          python3 tests/check-docs.py
+          python3 tests/check-duplicates.py
       - name: Clean-install smoke
         run: ./tests/install-smoke.sh
       - name: Personal manifest install

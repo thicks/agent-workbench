@@ -99,8 +99,22 @@ fi
 # C4: unpinned remotes are refused in noninteractive mode (no silent clone of HEAD).
 UNPINNED_TARGET="$(mktemp -d)"
 refuse_home_or_repo "$UNPINNED_TARGET"
+UNPINNED_MANIFEST="$UNPINNED_TARGET/manifest.json"
+python3 - "$UNPINNED_MANIFEST" <<'PY'
+from pathlib import Path
+import json, sys
+Path(sys.argv[1]).write_text(json.dumps({
+    "skills": [{
+        "skill": "unpinned-example",
+        "source": "remote",
+        "repo": "https://example.invalid/repo.git",
+        "file": "SKILL.md",
+    }]
+}))
+PY
 set +e
-INSTALL_REMOTE=1 NONINTERACTIVE=1 TARGET="$UNPINNED_TARGET" "$ROOT/skills-personal/install.sh" >"$UNPINNED_TARGET/out.txt" 2>&1
+INSTALL_REMOTE=1 NONINTERACTIVE=1 TARGET="$UNPINNED_TARGET" \
+  MANIFEST_FILE="$UNPINNED_MANIFEST" "$ROOT/skills-personal/install.sh" >"$UNPINNED_TARGET/out.txt" 2>&1
 unpinned_rc=$?
 set -e
 [[ "$unpinned_rc" -ne 0 ]] || fail "C4: INSTALL_REMOTE=1 without sha should fail"
