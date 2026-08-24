@@ -54,32 +54,68 @@ install_local() {
 }
 
 install_remote() {
-  local name="$1" repo="$2" file="$3"
-  local temp_dir
+  local name="$1" repo="$2" file="$3" sha="$4"
+  local temp_dir actual
 
   if [[ -z "$repo" || "$repo" == "null" ]]; then
-    echo "  skip remote $name: no repo"
-    return 0
+    echo "  skip remote $name: no repo" >&2
+    return 1
+  fi
+
+  if [[ -z "$sha" && "$NONINTERACTIVE" == "1" ]]; then
+    echo "  refusing unpinned remote $name ($repo); add a sha field to manifest.json" >&2
+    return 1
   fi
 
   temp_dir="$(mktemp -d)"
-  if ! git clone --depth 1 "$repo" "$temp_dir"; then
+  if [[ -n "$sha" ]]; then
+    if ! git clone "$repo" "$temp_dir"; then
+      rm -rf "$temp_dir"
+      echo "  failed to clone $repo" >&2
+      return 1
+    fi
+    if ! git -C "$temp_dir" checkout --detach "$sha"; then
+      rm -rf "$temp_dir"
+      echo "  failed to checkout sha $sha in $repo" >&2
+      return 1
+    fi
+  else
+    if ! git clone --depth 1 "$repo" "$temp_dir"; then
+      rm -rf "$temp_dir"
+      echo "  failed to clone $repo" >&2
+      return 1
+    fi
+  fi
+
+  actual="$(git -C "$temp_dir" rev-parse HEAD)"
+  echo "  resolved SHA: $actual"
+  if [[ -n "$sha" && "$actual" != "$sha" && "$actual" != "$sha"* ]]; then
     rm -rf "$temp_dir"
-    echo "  failed to clone $repo" >&2
+    echo "  SHA mismatch for $name: wanted $sha got $actual" >&2
     return 1
   fi
+
+  if [[ -z "$sha" ]]; then
+    read -r -p "  Install $name at $actual? [y/N] " resp </dev/tty || resp="n"
+    if [[ ! "$resp" =~ ^[Yy]$ ]]; then
+      rm -rf "$temp_dir"
+      echo "  skipped $name"
+      return 0
+    fi
+  fi
+
   if [[ ! -f "$temp_dir/$file" ]]; then
     rm -rf "$temp_dir"
-    echo "  file not found: $file in $repo" >&2
+    echo "  file not found: $file in $repo@$actual" >&2
     return 1
   fi
   mkdir -p "$SKILLS_DIR/$name"
   cp "$temp_dir/$file" "$SKILLS_DIR/$name/$(basename "$file")"
-  echo "  installed: $SKILLS_DIR/$name/$(basename "$file") (remote)"
+  echo "  installed: $SKILLS_DIR/$name/$(basename "$file") (remote $actual)"
   rm -rf "$temp_dir"
 }
 
-while IFS=$'\t' read -r source name rel file repo; do
+while IFS=$'\t' read -r source name rel file repo sha; do
   [[ -n "$name" ]] || continue
   echo "  manifest: $name ($source)"
 
@@ -99,11 +135,11 @@ while IFS=$'\t' read -r source name rel file repo; do
   fi
 
   if [[ "$NONINTERACTIVE" == "1" ]]; then
-    install_remote "$name" "$repo" "$file"
+    install_remote "$name" "$repo" "$file" "$sha"
     continue
   fi
-  read -r -p "  Install remote $name from $repo? [y/N] " resp </dev/tty || resp="n"
-  [[ "$resp" =~ ^[Yy]$ ]] && install_remote "$name" "$repo" "$file"
+  read -r -p "  Clone remote $name from $repo? [y/N] " resp </dev/tty || resp="n"
+  [[ "$resp" =~ ^[Yy]$ ]] && install_remote "$name" "$repo" "$file" "$sha"
 done < <(python3 - "$MANIFEST_FILE" <<'PY'
 import json, sys
 from pathlib import Path
@@ -114,7 +150,8 @@ for entry in manifest.get("skills", []):
     rel = entry.get("path", name)
     filename = entry.get("file", "SKILL.md")
     repo = entry.get("repo") or ""
-    print(f"{source}\t{name}\t{rel}\t{filename}\t{repo}")
+    sha = entry.get("sha") or ""
+    print(f"{source}\t{name}\t{rel}\t{filename}\t{repo}\t{sha}")
 PY
 )
 

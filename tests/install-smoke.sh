@@ -8,6 +8,7 @@ STD_TARGET2=""
 ALL_TARGET=""
 ICM_TARGET=""
 ICM_ALL_TARGET=""
+SKIP_TARGET=""
 
 cleanup() {
   [[ -n "${STD_TARGET:-}" ]] && rm -rf "$STD_TARGET"
@@ -15,6 +16,7 @@ cleanup() {
   [[ -n "${ALL_TARGET:-}" ]] && rm -rf "$ALL_TARGET"
   [[ -n "${ICM_TARGET:-}" ]] && rm -rf "$ICM_TARGET"
   [[ -n "${ICM_ALL_TARGET:-}" ]] && rm -rf "$ICM_ALL_TARGET"
+  [[ -n "${SKIP_TARGET:-}" ]] && rm -rf "$SKIP_TARGET"
 }
 trap cleanup EXIT
 
@@ -46,6 +48,49 @@ assert_claude_skill() {
   heading="$(skill_heading "$src")"
   [[ -n "$heading" ]] || fail "no H1 heading in $src"
   assert_contains "$dest" "$heading"
+}
+
+# Body after the first --- pair. Matches install.sh skill_body().
+body_after_frontmatter() {
+  awk '
+    /^---$/ && done == 0 {
+      c++
+      if (c == 2) done = 1
+      next
+    }
+    done { print }
+  ' "$1" | sed '/./,$!d'
+}
+
+# Tools (Claude SKILL.md, Cursor .mdc, opencode skills) parse only the leading
+# YAML document. A second --- inside that document would break loading.
+assert_leading_frontmatter() {
+  local file="$1"
+  shift
+  python3 - "$file" "$@" <<'PY'
+import re, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+required = sys.argv[2:]
+text = path.read_text()
+match = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+if not match:
+    raise SystemExit(f"no leading YAML frontmatter: {path}")
+front = match.group(1)
+if "\n---\n" in front or front.startswith("---\n") or front.endswith("\n---"):
+    raise SystemExit(f"frontmatter is not a single YAML document: {path}")
+for key in required:
+    if not re.search(rf"^{re.escape(key)}:", front, re.M):
+        raise SystemExit(f"missing {key}: in frontmatter of {path}")
+PY
+}
+
+assert_skill_body_roundtrip() {
+  local src="$1" dest="$2"
+  local src_body dest_body
+  src_body="$(body_after_frontmatter "$src")"
+  dest_body="$(body_after_frontmatter "$dest")"
+  [[ "$src_body" == "$dest_body" ]] || fail "rendered body dropped --- or other content: $dest vs $src"
 }
 
 require_safe_empty_target() {
@@ -96,8 +141,14 @@ set -e
 
 for src in "$ROOT/skills/"*.md; do
   name="$(basename "$src" .md)"
-  assert_claude_skill "$src" "$STD_TARGET/.claude/skills/$name/SKILL.md" "$name"
+  dest="$STD_TARGET/.claude/skills/$name/SKILL.md"
+  assert_claude_skill "$src" "$dest" "$name"
+  assert_leading_frontmatter "$dest" "name" "description"
+  assert_skill_body_roundtrip "$src" "$dest"
 done
+
+# C2: incept's fenced spec template uses --- inside the body; those must survive.
+assert_contains "$STD_TARGET/.claude/skills/incept/SKILL.md" $'```markdown\n---\ntitle: <Idea Name>'
 
 for sub in agents commands rules; do
   for src in "$ROOT/adapters/claude/$sub"/*; do
@@ -140,13 +191,22 @@ set -e
 for src in "$ROOT/skills/"*.md; do
   name="$(basename "$src" .md)"
   heading="$(skill_heading "$src")"
-  assert_claude_skill "$src" "$ALL_TARGET/.claude/skills/$name/SKILL.md" "$name"
-  assert_file "$ALL_TARGET/.cursor/rules/${name}.mdc"
-  assert_contains "$ALL_TARGET/.cursor/rules/${name}.mdc" "alwaysApply: false"
-  assert_contains "$ALL_TARGET/.cursor/rules/${name}.mdc" "$heading"
-  assert_file "$ALL_TARGET/.opencode/skills/${name}.md"
-  assert_contains "$ALL_TARGET/.opencode/skills/${name}.md" "name: $name"
-  assert_contains "$ALL_TARGET/.opencode/skills/${name}.md" "$heading"
+  dest_claude="$ALL_TARGET/.claude/skills/$name/SKILL.md"
+  dest_cursor="$ALL_TARGET/.cursor/rules/${name}.mdc"
+  dest_open="$ALL_TARGET/.opencode/skills/${name}.md"
+  assert_claude_skill "$src" "$dest_claude" "$name"
+  assert_leading_frontmatter "$dest_claude" "name" "description"
+  assert_skill_body_roundtrip "$src" "$dest_claude"
+  assert_file "$dest_cursor"
+  assert_leading_frontmatter "$dest_cursor" "description" "alwaysApply"
+  assert_contains "$dest_cursor" "alwaysApply: false"
+  assert_contains "$dest_cursor" "$heading"
+  assert_skill_body_roundtrip "$src" "$dest_cursor"
+  assert_file "$dest_open"
+  assert_leading_frontmatter "$dest_open" "name" "description"
+  assert_contains "$dest_open" "name: $name"
+  assert_contains "$dest_open" "$heading"
+  assert_skill_body_roundtrip "$src" "$dest_open"
 done
 
 assert_file "$ALL_TARGET/.cursorrules"
@@ -210,5 +270,20 @@ assert_file "$ICM_ALL_TARGET/.opencode/instructions.md"
 for src in "$ROOT/skills/"*.md; do
   assert_file "$ICM_ALL_TARGET/workflows/dev-workflow/skills/$(basename "$src")"
 done
+
+# C3: skipping one overwrite must not abort the rest of the install (set -e).
+SKIP_TARGET="$(mktemp -d)"
+require_safe_empty_target "$SKIP_TARGET"
+mkdir -p "$SKIP_TARGET/.claude/skills/code-review"
+printf 'OLD-SKILL\n' > "$SKIP_TARGET/.claude/skills/code-review/SKILL.md"
+set +e
+printf '%s\n' "$SKIP_TARGET" "1" "y" "n" | "$ROOT/install.sh"
+skip_rc=$?
+set -e
+[[ "$skip_rc" -eq 0 ]] || fail "install.sh exited $skip_rc after skip (C3)"
+grep -Fqe 'OLD-SKILL' "$SKIP_TARGET/.claude/skills/code-review/SKILL.md" || fail "skipped skill was overwritten"
+assert_file "$SKIP_TARGET/.claude/skills/incept/SKILL.md"
+assert_file "$SKIP_TARGET/.claude/agents/task-executor.md"
+assert_file "$SKIP_TARGET/.claude/settings.json"
 
 echo "PASS: clean-install smoke test"

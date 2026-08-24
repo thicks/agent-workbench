@@ -113,4 +113,21 @@ set -e
 [[ "$standalone_rc" -eq 0 ]] || fail "skills-personal/install.sh exited $standalone_rc"
 assert_local_claude_from_manifest "$STANDALONE_TARGET"
 
+# C4: prompts must not share stdin with the manifest stream.
+grep -Fqe '/dev/tty' "$ROOT/skills-personal/install.sh" || fail "C4: prompts must read from /dev/tty"
+if grep -E 'jq .+\| while read' "$ROOT/skills-personal/install.sh"; then
+  fail "C4: do not pipe jq into the prompt loop"
+fi
+
+# C4: unpinned remotes are refused in noninteractive mode (no silent clone of HEAD).
+UNPINNED_TARGET="$(mktemp -d)"
+refuse_home_or_repo "$UNPINNED_TARGET"
+set +e
+INSTALL_REMOTE=1 NONINTERACTIVE=1 TARGET="$UNPINNED_TARGET" "$ROOT/skills-personal/install.sh" >"$UNPINNED_TARGET/out.txt" 2>&1
+unpinned_rc=$?
+set -e
+[[ "$unpinned_rc" -ne 0 ]] || fail "C4: INSTALL_REMOTE=1 without sha should fail"
+grep -Fqe 'unpinned remote' "$UNPINNED_TARGET/out.txt" || fail "C4: expected unpinned remote error"
+rm -rf "$UNPINNED_TARGET"
+
 echo "PASS: personal-manifest install"

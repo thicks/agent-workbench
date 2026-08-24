@@ -41,26 +41,42 @@ prompt_overwrite() {
   read -rp "  Overwrite? [y/N/b=backup only] " resp
   case "$resp" in
     [Yy]) return 0 ;;
-    [Bb]) backup_if_exists "$target"; return 1 ;;
-    *) echo "  skipped"; return 1 ;;
+    [Bb]) backup_if_exists "$target"; return 2 ;;
+    *) echo "  skipped"; return 2 ;;
   esac
+}
+
+ok_or_skip() {
+  local st=0
+  "$@" || st=$?
+  [[ "$st" -eq 0 || "$st" -eq 2 ]]
 }
 
 install_file_safe() {
   local src="$1"
   local dest="$2"
   local desc="${3:-$(basename "$dest")}"
+  local st=0
+
+  if [[ ! -f "$src" ]]; then
+    echo "  missing source: $src" >&2
+    return 1
+  fi
 
   if [[ -e "$dest" ]]; then
     if cmp -s "$src" "$dest"; then
       echo "  unchanged: $desc"
       return 0
     fi
-    prompt_overwrite "$dest" "$desc" || return 1
+    prompt_overwrite "$dest" "$desc" || {
+      st=$?
+      [[ "$st" -eq 2 ]] && return 2
+      return "$st"
+    }
   fi
 
-  mkdir -p "$(dirname "$dest")"
-  cp "$src" "$dest"
+  mkdir -p "$(dirname "$dest")" || return 1
+  cp "$src" "$dest" || return 1
   echo "  installed: $desc"
 }
 
@@ -85,10 +101,10 @@ install_dir_safe() {
         prompt_overwrite "$dest_file" "$desc/$filename" || continue
         rm -rf "$dest_file"
       fi
-      cp -R "$src_file" "$dest_file"
+      cp -R "$src_file" "$dest_file" || return 1
       echo "  installed: $desc/$filename/"
     else
-      install_file_safe "$src_file" "$dest_file" "$desc/$filename" || true
+      ok_or_skip install_file_safe "$src_file" "$dest_file" "$desc/$filename"
     fi
   done
 }
@@ -109,28 +125,28 @@ fi
 mkdir -p "$TARGET/workflows/dev-workflow/skills"
 for skill_file in "$REPO_DIR/skills/"*.md; do
   filename="$(basename "$skill_file")"
-  install_file_safe "$skill_file" "$TARGET/workflows/dev-workflow/skills/$filename" "workflows/dev-workflow/skills/$filename"
+  ok_or_skip install_file_safe "$skill_file" "$TARGET/workflows/dev-workflow/skills/$filename" "workflows/dev-workflow/skills/$filename"
 done
 
 PERSONAL_DIR="$REPO_DIR/skills-personal"
 PERSONAL_MANIFEST="$PERSONAL_DIR/manifest.json"
 if [[ -f "$PERSONAL_MANIFEST" ]]; then
   mkdir -p "$TARGET/skills-personal"
-  install_file_safe "$PERSONAL_MANIFEST" "$TARGET/skills-personal/manifest.json" "skills-personal/manifest.json"
+  ok_or_skip install_file_safe "$PERSONAL_MANIFEST" "$TARGET/skills-personal/manifest.json" "skills-personal/manifest.json"
   mkdir -p "$TARGET/workflows/dev-workflow/skills"
   for dir in "$PERSONAL_DIR"/*/; do
     [[ -d "$dir" ]] || continue
     name="$(basename "$dir")"
     [[ -f "$dir/SKILL.md" ]] || continue
     grep -q "\"skill\": \"$name\"" "$PERSONAL_MANIFEST" || continue
-    install_file_safe "$dir/SKILL.md" "$TARGET/workflows/dev-workflow/skills/${name}.md" "workflows/dev-workflow/skills/${name}.md" || true
+    ok_or_skip install_file_safe "$dir/SKILL.md" "$TARGET/workflows/dev-workflow/skills/${name}.md" "workflows/dev-workflow/skills/${name}.md"
   done
 fi
 
 mkdir -p "$TARGET/workflows/dev-workflow/references"
 for ref_file in "$REPO_DIR/references/"*.md; do
   filename="$(basename "$ref_file")"
-  install_file_safe "$ref_file" "$TARGET/workflows/dev-workflow/references/$filename" "workflows/dev-workflow/references/$filename"
+  ok_or_skip install_file_safe "$ref_file" "$TARGET/workflows/dev-workflow/references/$filename" "workflows/dev-workflow/references/$filename"
 done
 
 install_claude() {
@@ -140,20 +156,20 @@ install_claude() {
 
   install_dir_safe "$ICM_DIR/adapters/claude/agents" "$TARGET/.claude/agents" ".claude/agents"
 
-  install_file_safe "$ICM_DIR/adapters/claude/CLAUDE.md" "$TARGET/CLAUDE.md" "CLAUDE.md"
+  ok_or_skip install_file_safe "$ICM_DIR/adapters/claude/CLAUDE.md" "$TARGET/CLAUDE.md" "CLAUDE.md"
 }
 
 install_cursor() {
   echo
   echo "Installing Cursor adapter..."
-  install_file_safe "$ICM_DIR/adapters/cursor/.cursorrules" "$TARGET/.cursorrules" ".cursorrules"
+  ok_or_skip install_file_safe "$ICM_DIR/adapters/cursor/.cursorrules" "$TARGET/.cursorrules" ".cursorrules"
 }
 
 install_opencode() {
   echo
   echo "Installing opencode adapter..."
   mkdir -p "$TARGET/.opencode"
-  install_file_safe "$ICM_DIR/adapters/opencode/instructions.md" "$TARGET/.opencode/instructions.md" ".opencode/instructions.md"
+  ok_or_skip install_file_safe "$ICM_DIR/adapters/opencode/instructions.md" "$TARGET/.opencode/instructions.md" ".opencode/instructions.md"
 }
 
 case "$TOOL" in
